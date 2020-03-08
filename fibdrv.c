@@ -6,6 +6,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/uaccess.h>
 
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("National Cheng Kung University, Taiwan");
@@ -24,9 +25,36 @@ static struct cdev *fib_cdev;
 static struct class *fib_class;
 static DEFINE_MUTEX(fib_mutex);
 
+unsigned long long fib_fast_doubling(long long k)
+{
+    unsigned int digit = 0;
+    int saved = k;
+    while (k) {
+        digit++;
+        k /= 2;
+    }
+    k = saved;
+    unsigned long long a, b, tmp;
+    a = 0;
+    b = 1;
+    for (unsigned int i = digit; i > 0; i--) {
+        a = a * (2 * b - a);
+        b = b * b + a * a;
+        // a = t1;
+        // b = t2;
+        if (k & (1 << (i - 1))) {
+            tmp = a + b;
+            a = b;
+            b = tmp;
+            // k &= ~(1 << (i - 1));
+        }
+    }
+    return a;
+}
+
+/*
 static long long fib_sequence(long long k)
 {
-    /* FIXME: use clz/ctz and fast algorithms to speed up */
     long long f[k + 2];
 
     f[0] = 0;
@@ -38,6 +66,7 @@ static long long fib_sequence(long long k)
 
     return f[k];
 }
+*/
 
 static int fib_open(struct inode *inode, struct file *file)
 {
@@ -60,7 +89,9 @@ static ssize_t fib_read(struct file *file,
                         size_t size,
                         loff_t *offset)
 {
-    return (ssize_t) fib_sequence(*offset);
+    // ssize_t result1 = fib_sequence(*offset);
+    ssize_t result2 = fib_fast_doubling(*offset);
+    return result2;
 }
 
 /* write operation is skipped */
@@ -69,7 +100,7 @@ static ssize_t fib_write(struct file *file,
                          size_t size,
                          loff_t *offset)
 {
-    return 1;
+    return 2;
 }
 
 static loff_t fib_device_lseek(struct file *file, loff_t offset, int orig)
