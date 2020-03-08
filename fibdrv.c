@@ -34,18 +34,19 @@ unsigned long long fib_fast_doubling(long long k)
         k /= 2;
     }
     k = saved;
-    unsigned long long a, b, tmp;
+    unsigned long long a, b;
     a = 0;
     b = 1;
     for (unsigned int i = digit; i > 0; i--) {
-        a = a * (2 * b - a);
-        b = b * b + a * a;
-        // a = t1;
-        // b = t2;
+        unsigned long long t1, t2;
+        t1 = a * (2 * b - a);
+        t2 = b * b + a * a;
+        a = t1;
+        b = t2;
         if (k & (1 << (i - 1))) {
-            tmp = a + b;
+            t1 = a + b;
             a = b;
-            b = tmp;
+            b = t1;
             // k &= ~(1 << (i - 1));
         }
     }
@@ -89,7 +90,6 @@ static ssize_t fib_read(struct file *file,
                         size_t size,
                         loff_t *offset)
 {
-    // ssize_t result1 = fib_sequence(*offset);
     ssize_t result2 = fib_fast_doubling(*offset);
     return result2;
 }
@@ -100,7 +100,7 @@ static ssize_t fib_write(struct file *file,
                          size_t size,
                          loff_t *offset)
 {
-    return 2;
+    return 1;
 }
 
 static loff_t fib_device_lseek(struct file *file, loff_t offset, int orig)
