@@ -51,7 +51,7 @@ unsigned int clz(long long k)
         n += 1;
     }
 
-    return n
+    return n;
 }
 
 unsigned long long fib_fast_doubling_clz(long long k)
