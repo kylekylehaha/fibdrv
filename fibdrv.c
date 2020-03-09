@@ -25,6 +25,68 @@ static struct cdev *fib_cdev;
 static struct class *fib_class;
 static DEFINE_MUTEX(fib_mutex);
 
+unsigned int clz(long long k)
+{
+    unsigned int n = 0;
+
+    if (k == 0)
+        return 0;
+
+    if (k <= 0x00000000FFFFFFFF) {
+        n += 32;
+    }
+    if (k <= 0x0000FFFFFFFFFFFF) {
+        n += 16;
+    }
+    if (k <= 0x00FFFFFFFFFFFFFF) {
+        n += 8;
+    }
+    if (k <= 0x0FFFFFFFFFFFFFFF) {
+        n += 4;
+    }
+    if (k <= 0x3FFFFFFFFFFFFFFF) {
+        n += 2;
+    }
+    if (k <= 0x7FFFFFFFFFFFFFFF) {
+        n += 1;
+    }
+
+    return n
+}
+
+unsigned long long fib_fast_doubling_clz(long long k)
+{
+    unsigned int digit = 0;
+    int saved = k;
+    while (k) {
+        digit++;
+        k /= 2;
+    }
+    k = saved;
+
+    unsigned int n = clz(k);
+    k << n;
+
+    unsigned long long a, b;
+    a = 0;
+    b = 1;
+    for (unsigned int i = digit; i > 0; i--) {
+        unsigned long long t1, t2;
+        t1 = a * (2 * b - a);
+        t2 = b * b + a * a;
+        a = t1;
+        b = t2;
+        if (k & (1 << (i - 1))) {
+            t1 = a + b;
+            a = b;
+            b = t1;
+            // k &= ~(1 << (i - 1));
+        }
+    }
+    return a;
+}
+
+/*
 unsigned long long fib_fast_doubling(long long k)
 {
     unsigned int digit = 0;
@@ -52,6 +114,7 @@ unsigned long long fib_fast_doubling(long long k)
     }
     return a;
 }
+*/
 
 /*
 static long long fib_sequence(long long k)
@@ -90,7 +153,7 @@ static ssize_t fib_read(struct file *file,
                         size_t size,
                         loff_t *offset)
 {
-    ssize_t result2 = fib_fast_doubling(*offset);
+    ssize_t result2 = fib_fast_doubling_clz(*offset);
     return result2;
 }
 
