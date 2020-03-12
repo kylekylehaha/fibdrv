@@ -6,7 +6,9 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/slab.h>
 #include <linux/uaccess.h>
+#include "bigN.h"
 
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("National Cheng Kung University, Taiwan");
@@ -18,13 +20,37 @@ MODULE_VERSION("0.1");
 /* MAX_LENGTH is set to 92 because
  * ssize_t can't fit the number > 92
  */
-#define MAX_LENGTH 92
+#define MAX_LENGTH 100
+
+// typedef static unsigned long long (*fib_op)(long long k)
 
 static dev_t fib_dev = 0;
 static struct cdev *fib_cdev;
 static struct class *fib_class;
 static DEFINE_MUTEX(fib_mutex);
+static ktime_t kt;
 
+static void bigN_assign(bigN *a, bigN *b)
+{
+    for (int i = 0; i < part_num; i++) {
+        a->part[i] = b->part[i];
+    }
+    return;
+}
+
+
+static void bigN_add(bigN *output, bigN x, bigN y)
+{
+    memset(output, 0, sizeof(bigN));
+    unsigned long long carry = 0;
+    for (int i = 0; i < part_num; i++) {
+        unsigned long long tmp = carry + x.part[i] + y.part[i];
+        output->part[i] = tmp % BASE;
+        carry = tmp / BASE;
+    }
+}
+
+/*s
 unsigned int clz(long long k)
 {
     unsigned int n = 0;
@@ -54,7 +80,7 @@ unsigned int clz(long long k)
     return n;
 }
 
-unsigned long long fib_fast_doubling_clz(long long k)
+static unsigned long long fib_fast_doubling_clz(long long k)
 {
     unsigned int digit = 0;
     int saved = k;
@@ -80,14 +106,14 @@ unsigned long long fib_fast_doubling_clz(long long k)
             t1 = a + b;
             a = b;
             b = t1;
-            // k &= ~(1 << (i - 1));
         }
     }
+
     return a;
 }
 
-/*
-unsigned long long fib_fast_doubling(long long k)
+
+static unsigned long long fib_fast_doubling(long long k)
 {
     unsigned int digit = 0;
     int saved = k;
@@ -112,23 +138,44 @@ unsigned long long fib_fast_doubling(long long k)
             // k &= ~(1 << (i - 1));
         }
     }
+
     return a;
 }
 */
 
-/*
-static long long fib_sequence(long long k)
+
+static void fib_sequence(long long k, bigN *output)
 {
-    long long f[k + 2];
-
-    f[0] = 0;
-    f[1] = 1;
-
+    if (k == 0) {
+        memset(output, 0, sizeof(bigN));
+        return;
+    }
+    bigN *f0, *f1, *f2;
+    f0 = kmalloc(sizeof(bigN), GFP_KERNEL);
+    f1 = kmalloc(sizeof(bigN), GFP_KERNEL);
+    memset(f0, 0, sizeof(bigN));
+    memset(f1, 0, sizeof(bigN));
+    f0->part[0] = 0;
+    f1->part[0] = 1;
     for (int i = 2; i <= k; i++) {
-        f[i] = f[i - 1] + f[i - 2];
+        bigN_add(f0, *f0, *f1);
+        f2 = f0;
+        f0 = f1;
+        f1 = f2;
     }
 
-    return f[k];
+    bigN_assign(output, f1);
+    return;
+}
+
+/*
+static unsigned long long fib_time_proxy(long long k)
+{
+    kt = ktime_get();
+    unsigned long long result = fib_fast_doubling_clz(k);
+    kt = ktime_sub(ktime_get(), kt);
+
+    return result;
 }
 */
 
@@ -153,8 +200,14 @@ static ssize_t fib_read(struct file *file,
                         size_t size,
                         loff_t *offset)
 {
-    ssize_t result2 = fib_fast_doubling_clz(*offset);
-    return result2;
+    bigN tmp;
+    kt = ktime_get();
+    fib_sequence(*offset, &tmp);
+    kt = ktime_get();
+    tmp.kernel_t = ktime_to_ns(kt);
+    copy_to_user(buf, &tmp, size);
+
+    return 1;
 }
 
 /* write operation is skipped */

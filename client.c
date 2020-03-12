@@ -5,8 +5,10 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#include "bigN.h"
 
 #define FIB_DEV "/dev/fibonacci"
+
 
 unsigned int diff_in_ns(struct timespec t1, struct timespec t2)
 {
@@ -21,14 +23,33 @@ unsigned int diff_in_ns(struct timespec t1, struct timespec t2)
     return (unsigned int) result.tv_sec * 1000000000 + result.tv_nsec;
 }
 
+static void bigN_print(bigN buf)
+{
+    int i = part_num - 1;
+    while ((i >= 0) && (buf.part[i] == 0))
+        i--;
+    if (i < 0) {
+        printf("0");
+        return;
+    }
+    printf("%lld", buf.part[i--]);
+    while (i >= 0) {
+        printf("%08lld", buf.part[i]);
+        i--;
+    }
+}
+
 int main()
 {
-    FILE *fp = fopen("time.txt", "wb+");
+    bigN output;
+
     long long sz;
 
-    char buf[1];
     char write_buf[] = "testing writing";
-    int offset = 92; /* TODO: try test something bigger than the limit */
+    int offset = 100; /* TODO: try test something bigger than the limit */
+
+    FILE *fp1 = fopen("user_space.txt", "wb+");
+    FILE *fp2 = fopen("kernel_space.txt", "wb+");
 
     int fd = open(FIB_DEV, O_RDWR);
     if (fd < 0) {
@@ -36,35 +57,33 @@ int main()
         exit(1);
     }
 
+
     for (int i = 0; i <= offset; i++) {
         sz = write(fd, write_buf, strlen(write_buf));
         printf("Writing to " FIB_DEV ", returned the sequence %lld\n", sz);
     }
 
+
     for (int i = 0; i <= offset; i++) {
         lseek(fd, i, SEEK_SET);
         struct timespec start, end;
         clock_gettime(CLOCK_REALTIME, &start);
-        sz = read(fd, buf, 1);
+        sz = read(fd, &output, sizeof(bigN));
         clock_gettime(CLOCK_REALTIME, &end);
-        fprintf(fp, "%d %u\n", i, diff_in_ns(start, end));
 
-        printf("Reading from " FIB_DEV
-               " at offset %d, returned the sequence "
-               "%lld.\n",
-               i, sz);
+        output.user_t = diff_in_ns(start, end);
+
+        printf("Reading to " FIB_DEV ", offset : %d, returned the sequence ",
+               i);
+        bigN_print(output);
+        printf("\n");
+
+        fprintf(fp1, "%d %u\n", i, output.user_t);
+        fprintf(fp2, "%d %u\n", i, output.kernel_t);
     }
-    /*
-        for (int i = offset; i >= 0; i--) {
-            lseek(fd, i, SEEK_SET);
-            sz = read(fd, buf, 1);
-            printf("Reading from " FIB_DEV
-                   " at offset %d, returned the sequence "
-                   "%lld.\n",
-                   i, sz);
-        }
-    */
-    fclose(fp);
+
+    fclose(fp1);
+    fclose(fp2);
     close(fd);
     return 0;
 }
