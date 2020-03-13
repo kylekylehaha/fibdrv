@@ -39,111 +39,135 @@ static void bigN_assign(bigN *a, bigN *b)
 }
 
 
-static void bigN_add(bigN *output, bigN x, bigN y)
+static void bigN_add(bigN *output, bigN a, bigN b)
 {
     memset(output, 0, sizeof(bigN));
     unsigned long long carry = 0;
     for (int i = 0; i < part_num; i++) {
-        unsigned long long tmp = carry + x.part[i] + y.part[i];
+        unsigned long long tmp = carry + a.part[i] + b.part[i];
         output->part[i] = tmp % BASE;
         carry = tmp / BASE;
     }
+    return;
 }
 
-/*s
-unsigned int clz(long long k)
+static void bigN_sub(bigN *output, bigN a, bigN b)
 {
-    unsigned int n = 0;
-
-    if (k == 0)
-        return 0;
-
-    if (k <= 0x00000000FFFFFFFF) {
-        n += 32;
-    }
-    if (k <= 0x0000FFFFFFFFFFFF) {
-        n += 16;
-    }
-    if (k <= 0x00FFFFFFFFFFFFFF) {
-        n += 8;
-    }
-    if (k <= 0x0FFFFFFFFFFFFFFF) {
-        n += 4;
-    }
-    if (k <= 0x3FFFFFFFFFFFFFFF) {
-        n += 2;
-    }
-    if (k <= 0x7FFFFFFFFFFFFFFF) {
-        n += 1;
-    }
-
-    return n;
-}
-
-static unsigned long long fib_fast_doubling_clz(long long k)
-{
-    unsigned int digit = 0;
-    int saved = k;
-    while (k) {
-        digit++;
-        k /= 2;
-    }
-    k = saved;
-
-    unsigned int n = clz(k);
-    k << n;
-
-    unsigned long long a, b;
-    a = 0;
-    b = 1;
-    for (unsigned int i = digit; i > 0; i--) {
-        unsigned long long t1, t2;
-        t1 = a * (2 * b - a);
-        t2 = b * b + a * a;
-        a = t1;
-        b = t2;
-        if (k & (1 << (i - 1))) {
-            t1 = a + b;
-            a = b;
-            b = t1;
+    bigN_assign(output, &a);
+    for (int i = 0; i < part_num; i++) {
+        output->part[i] -= b.part[i];
+        if ((output->part[i]) < 0) {
+            output->part[i] += BASE;
+            output->part[i + 1] -= 1;
         }
     }
-
-    return a;
+    return;
 }
 
-
-static unsigned long long fib_fast_doubling(long long k)
+static void bigN_mul(bigN *output, bigN a, bigN b)
 {
-    unsigned int digit = 0;
-    int saved = k;
-    while (k) {
-        digit++;
-        k /= 2;
-    }
-    k = saved;
-    unsigned long long a, b;
-    a = 0;
-    b = 1;
-    for (unsigned int i = digit; i > 0; i--) {
-        unsigned long long t1, t2;
-        t1 = a * (2 * b - a);
-        t2 = b * b + a * a;
-        a = t1;
-        b = t2;
-        if (k & (1 << (i - 1))) {
-            t1 = a + b;
-            a = b;
-            b = t1;
-            // k &= ~(1 << (i - 1));
+    memset(output, 0, sizeof(bigN));
+    for (int i = 0; i < part_num; i++) {
+        long long carry = 0;
+        for (int j = 0; i + j < part_num; j++) {
+            long long tmp = a.part[i] * b.part[j] + carry + output->part[i + j];
+            output->part[i + j] = tmp % BASE;
+            carry = tmp / BASE;
         }
     }
+    return;
+}
 
-    return a;
+static void fib_fd_clz(long long k, bigN *output)
+{
+    if (k == 0) {
+        memset(output, 0, sizeof(bigN));
+        return;
+    }
+    int clz = __builtin_clz((int) k) + 32;
+    int digit = 64 - clz;
+    k <<= clz;
+
+    bigN t[7];  // 0: f(n), 1: f(n+1), 2:f(2n), 3: f(2n+1), 4: tmp, 5: tmp, 6: 2
+    for (int i = 0; i < 7; i++) {
+        memset(&t[i], 0, sizeof(bigN));
+    }
+    t[1].part[0] = t[2].part[0] = 1;
+    t[6].part[0] = 2;
+    for (int i = 0; i < digit; i++) {
+        // f(2n + 1) = f(n + 1) ^ 2 + f(n) ^ 2
+        bigN_mul(&t[4], t[0], t[0]);
+        bigN_mul(&t[5], t[1], t[1]);
+        bigN_add(&t[3], t[4], t[5]);
+
+        // f(2n) = f(n) * 2 * f(n + 1) - f(n) ^ 2
+        bigN_mul(&t[4], t[0], t[6]);
+        bigN_mul(&t[4], t[4], t[1]);
+        bigN_mul(&t[5], t[0], t[0]);
+        bigN_sub(&t[2], t[4], t[5]);
+
+        bigN_assign(&t[0], &t[2]);
+        bigN_assign(&t[1], &t[3]);
+
+        if (k & 0x8000000000000000) {
+            bigN_add(&t[4], t[0], t[1]);
+            bigN_assign(&t[0], &t[3]);
+            bigN_assign(&t[1], &t[4]);
+        }
+        k <<= 1;
+    }
+    bigN_assign(output, &t[0]);
+    return;
+}
+
+/*
+static void fib_fd(long long k, bigN *output)
+{
+    if (k == 0) {
+        memset(output, 0, sizeof(bigN));
+        return;
+    }
+
+    bigN t[7];  // 0: f(n), 1: f(n+1), 2:f(2n), 3: f(2n+1), 4: tmp, 5: tmp, 6: 2
+
+    for (int i = 0; i < 7; i++) {
+        memset(&t[i], 0, sizeof(bigN));
+    }
+
+    t[0].part[0] = t[1].part[0] = t[2].part[0] = 1;
+    t[6].part[0] = 2;
+
+    int i = 1;
+    while (i < k) {
+        if ((i << 1) <= k) {
+            // f(2n + 1) = f(n + 1) ^ 2 + f(n) ^ 2
+            bigN_mul(&t[4], t[0], t[0]);
+            bigN_mul(&t[5], t[1], t[1]);
+            bigN_add(&t[3], t[4], t[5]);
+
+            // f(2n) = f(n) * 2 * f(n + 1) - f(n) ^ 2
+            bigN_mul(&t[4], t[0], t[6]);
+            bigN_mul(&t[4], t[4], t[1]);
+            bigN_mul(&t[5], t[0], t[0]);
+            bigN_sub(&t[2], t[4], t[5]);
+
+            bigN_assign(&t[0], &t[2]);      //   f(n) = f(2n),
+            bigN_assign(&t[1], &t[3]);      //   f(n+1) = f(2n + 1)
+            i <<= 1;
+        } else {
+            bigN_assign(&t[0], &t[2]);      //f(n) = f(2n)
+            bigN_assign(&t[2], &t[3]);      //f(2n) = f(2n + 1)
+            bigN_add(&t[4], t[0], t[3]);        //f(2n + 1) = f(n) + f(2n + 1)
+            bigN_assign(&t[3], &t[4]);
+            i++;
+        }
+    }
+    bigN_assign(output, &t[2]);
+    return;
 }
 */
 
-
+/*
 static void fib_sequence(long long k, bigN *output)
 {
     if (k == 0) {
@@ -166,16 +190,6 @@ static void fib_sequence(long long k, bigN *output)
 
     bigN_assign(output, f1);
     return;
-}
-
-/*
-static unsigned long long fib_time_proxy(long long k)
-{
-    kt = ktime_get();
-    unsigned long long result = fib_fast_doubling_clz(k);
-    kt = ktime_sub(ktime_get(), kt);
-
-    return result;
 }
 */
 
@@ -202,8 +216,8 @@ static ssize_t fib_read(struct file *file,
 {
     bigN tmp;
     kt = ktime_get();
-    fib_sequence(*offset, &tmp);
-    kt = ktime_get();
+    fib_fd_clz(*offset, &tmp);
+    kt = ktime_sub(ktime_get(), kt);
     tmp.kernel_t = ktime_to_ns(kt);
     copy_to_user(buf, &tmp, size);
 
