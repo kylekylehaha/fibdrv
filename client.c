@@ -48,11 +48,6 @@ int main()
     char write_buf[] = "testing writing";
     int offset = 100; /* TODO: try test something bigger than the limit */
 
-    // FILE *fp1 = fopen("user_space.txt", "wb+");
-    // FILE *fp2 = fopen("kernel_space.txt", "wb+");
-    // FILE *fp3 = fopen("fib_fd.txt", "wb+");
-    // FILE *fp4 = fopen("fib_fd_clz.txt", "wb+");
-
     int fd = open(FIB_DEV, O_RDWR);
     if (fd < 0) {
         perror("Failed to open character device");
@@ -80,16 +75,8 @@ int main()
                i);
         bignum_print(output);
         printf("\n");
-
-        // fprintf(fp1, "%d %u\n", i, output.user_t);
-        // fprintf(fp2, "%d %u\n", i, output.kernel_t);
-        // fprintf(fp4, "%d %u\n", i, output.user_t);
     }
 
-    // fclose(fp4);
-    // fclose(fp3);
-    // fclose(fp1);
-    // fclose(fp2);
     close(fd);
     return 0;
 }
