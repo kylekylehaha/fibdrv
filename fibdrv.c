@@ -8,7 +8,7 @@
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
-#include "bigN.h"
+#include "bignum.h"
 
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("National Cheng Kung University, Taiwan");
@@ -30,7 +30,7 @@ static struct class *fib_class;
 static DEFINE_MUTEX(fib_mutex);
 static ktime_t kt;
 
-static void bigN_assign(bigN *a, bigN *b)
+static void bignum_assign(bignum *a, bignum *b)
 {
     for (int i = 0; i < part_num; i++) {
         a->part[i] = b->part[i];
@@ -39,9 +39,9 @@ static void bigN_assign(bigN *a, bigN *b)
 }
 
 
-static void bigN_add(bigN *output, bigN a, bigN b)
+static void bignum_add(bignum *output, bignum a, bignum b)
 {
-    memset(output, 0, sizeof(bigN));
+    memset(output, 0, sizeof(bignum));
     unsigned long long carry = 0;
     for (int i = 0; i < part_num; i++) {
         unsigned long long tmp = carry + a.part[i] + b.part[i];
@@ -51,9 +51,9 @@ static void bigN_add(bigN *output, bigN a, bigN b)
     return;
 }
 
-static void bigN_sub(bigN *output, bigN a, bigN b)
+static void bignum_sub(bignum *output, bignum a, bignum b)
 {
-    bigN_assign(output, &a);
+    bignum_assign(output, &a);
     for (int i = 0; i < part_num; i++) {
         output->part[i] -= b.part[i];
         if ((output->part[i]) < 0) {
@@ -64,9 +64,9 @@ static void bigN_sub(bigN *output, bigN a, bigN b)
     return;
 }
 
-static void bigN_mul(bigN *output, bigN a, bigN b)
+static void bignum_mul(bignum *output, bignum a, bignum b)
 {
-    memset(output, 0, sizeof(bigN));
+    memset(output, 0, sizeof(bignum));
     for (int i = 0; i < part_num; i++) {
         long long carry = 0;
         for (int j = 0; i + j < part_num; j++) {
@@ -78,60 +78,62 @@ static void bigN_mul(bigN *output, bigN a, bigN b)
     return;
 }
 
-static void fib_fd_clz(long long k, bigN *output)
+static void fib_fd_clz(long long k, bignum *output)
 {
     if (k == 0) {
-        memset(output, 0, sizeof(bigN));
+        memset(output, 0, sizeof(bignum));
         return;
     }
     int clz = __builtin_clz((int) k) + 32;
     int digit = 64 - clz;
     k <<= clz;
 
-    bigN t[7];  // 0: f(n), 1: f(n+1), 2:f(2n), 3: f(2n+1), 4: tmp, 5: tmp, 6: 2
+    bignum
+        t[7];  // 0: f(n), 1: f(n+1), 2:f(2n), 3: f(2n+1), 4: tmp, 5: tmp, 6: 2
     for (int i = 0; i < 7; i++) {
-        memset(&t[i], 0, sizeof(bigN));
+        memset(&t[i], 0, sizeof(bignum));
     }
     t[1].part[0] = t[2].part[0] = 1;
     t[6].part[0] = 2;
     for (int i = 0; i < digit; i++) {
         // f(2n + 1) = f(n + 1) ^ 2 + f(n) ^ 2
-        bigN_mul(&t[4], t[0], t[0]);
-        bigN_mul(&t[5], t[1], t[1]);
-        bigN_add(&t[3], t[4], t[5]);
+        bignum_mul(&t[4], t[0], t[0]);
+        bignum_mul(&t[5], t[1], t[1]);
+        bignum_add(&t[3], t[4], t[5]);
 
         // f(2n) = f(n) * 2 * f(n + 1) - f(n) ^ 2
-        bigN_mul(&t[4], t[0], t[6]);
-        bigN_mul(&t[4], t[4], t[1]);
-        bigN_mul(&t[5], t[0], t[0]);
-        bigN_sub(&t[2], t[4], t[5]);
+        bignum_mul(&t[4], t[0], t[6]);
+        bignum_mul(&t[4], t[4], t[1]);
+        bignum_mul(&t[5], t[0], t[0]);
+        bignum_sub(&t[2], t[4], t[5]);
 
-        bigN_assign(&t[0], &t[2]);
-        bigN_assign(&t[1], &t[3]);
+        bignum_assign(&t[0], &t[2]);
+        bignum_assign(&t[1], &t[3]);
 
         if (k & 0x8000000000000000) {
-            bigN_add(&t[4], t[0], t[1]);
-            bigN_assign(&t[0], &t[3]);
-            bigN_assign(&t[1], &t[4]);
+            bignum_add(&t[4], t[0], t[1]);
+            bignum_assign(&t[0], &t[3]);
+            bignum_assign(&t[1], &t[4]);
         }
         k <<= 1;
     }
-    bigN_assign(output, &t[0]);
+    bignum_assign(output, &t[0]);
     return;
 }
 
 /*
-static void fib_fd(long long k, bigN *output)
+static void fib_fd(long long k, bignum *output)
 {
     if (k == 0) {
-        memset(output, 0, sizeof(bigN));
+        memset(output, 0, sizeof(bignum));
         return;
     }
 
-    bigN t[7];  // 0: f(n), 1: f(n+1), 2:f(2n), 3: f(2n+1), 4: tmp, 5: tmp, 6: 2
+    bignum t[7];  // 0: f(n), 1: f(n+1), 2:f(2n), 3: f(2n+1), 4: tmp, 5: tmp, 6:
+2
 
     for (int i = 0; i < 7; i++) {
-        memset(&t[i], 0, sizeof(bigN));
+        memset(&t[i], 0, sizeof(bignum));
     }
 
     t[0].part[0] = t[1].part[0] = t[2].part[0] = 1;
@@ -141,44 +143,44 @@ static void fib_fd(long long k, bigN *output)
     while (i < k) {
         if ((i << 1) <= k) {
             // f(2n + 1) = f(n + 1) ^ 2 + f(n) ^ 2
-            bigN_mul(&t[4], t[0], t[0]);
-            bigN_mul(&t[5], t[1], t[1]);
-            bigN_add(&t[3], t[4], t[5]);
+            bignum_mul(&t[4], t[0], t[0]);
+            bignum_mul(&t[5], t[1], t[1]);
+            bignum_add(&t[3], t[4], t[5]);
 
             // f(2n) = f(n) * 2 * f(n + 1) - f(n) ^ 2
-            bigN_mul(&t[4], t[0], t[6]);
-            bigN_mul(&t[4], t[4], t[1]);
-            bigN_mul(&t[5], t[0], t[0]);
-            bigN_sub(&t[2], t[4], t[5]);
+            bignum_mul(&t[4], t[0], t[6]);
+            bignum_mul(&t[4], t[4], t[1]);
+            bignum_mul(&t[5], t[0], t[0]);
+            bignum_sub(&t[2], t[4], t[5]);
 
-            bigN_assign(&t[0], &t[2]);      //   f(n) = f(2n),
-            bigN_assign(&t[1], &t[3]);      //   f(n+1) = f(2n + 1)
+            bignum_assign(&t[0], &t[2]);      //   f(n) = f(2n),
+            bignum_assign(&t[1], &t[3]);      //   f(n+1) = f(2n + 1)
             i <<= 1;
         } else {
-            bigN_assign(&t[0], &t[2]);      //f(n) = f(2n)
-            bigN_assign(&t[2], &t[3]);      //f(2n) = f(2n + 1)
-            bigN_add(&t[4], t[0], t[3]);        //f(2n + 1) = f(n) + f(2n + 1)
-            bigN_assign(&t[3], &t[4]);
+            bignum_assign(&t[0], &t[2]);      //f(n) = f(2n)
+            bignum_assign(&t[2], &t[3]);      //f(2n) = f(2n + 1)
+            bignum_add(&t[4], t[0], t[3]);        //f(2n + 1) = f(n) + f(2n + 1)
+            bignum_assign(&t[3], &t[4]);
             i++;
         }
     }
-    bigN_assign(output, &t[2]);
+    bignum_assign(output, &t[2]);
     return;
 }
 */
 
 /*
-static void fib_sequence(long long k, bigN *output)
+static void fib_sequence(long long k, bignum *output)
 {
     if (k == 0) {
-        memset(output, 0, sizeof(bigN));
+        memset(output, 0, sizeof(bignum));
         return;
     }
-    bigN *f0, *f1, *f2;
-    f0 = kmalloc(sizeof(bigN), GFP_KERNEL);
-    f1 = kmalloc(sizeof(bigN), GFP_KERNEL);
-    memset(f0, 0, sizeof(bigN));
-    memset(f1, 0, sizeof(bigN));
+    bignum *f0, *f1, *f2;
+    f0 = kmalloc(sizeof(bignum), GFP_KERNEL);
+    f1 = kmalloc(sizeof(bignum), GFP_KERNEL);
+    memset(f0, 0, sizeof(bignum));
+    memset(f1, 0, sizeof(bignum));
     f0->part[0] = 0;
     f1->part[0] = 1;
     for (int i = 2; i <= k; i++) {
@@ -188,7 +190,7 @@ static void fib_sequence(long long k, bigN *output)
         f1 = f2;
     }
 
-    bigN_assign(output, f1);
+    bignum_assign(output, f1);
     return;
 }
 */
@@ -214,7 +216,7 @@ static ssize_t fib_read(struct file *file,
                         size_t size,
                         loff_t *offset)
 {
-    bigN tmp;
+    bignum tmp;
     kt = ktime_get();
     fib_fd_clz(*offset, &tmp);
     kt = ktime_sub(ktime_get(), kt);

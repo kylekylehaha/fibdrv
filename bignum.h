@@ -6,4 +6,4 @@ typedef struct BigN {
     long long part[part_num];
     unsigned int kernel_t;
     unsigned int user_t;
-} bigN;
+} bignum;

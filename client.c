@@ -5,7 +5,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
-#include "bigN.h"
+#include "bignum.h"
 
 #define FIB_DEV "/dev/fibonacci"
 
@@ -23,7 +23,7 @@ unsigned int diff_in_ns(struct timespec t1, struct timespec t2)
     return (unsigned int) result.tv_sec * 1000000000 + result.tv_nsec;
 }
 
-static void bigN_print(bigN buf)
+static void bignum_print(bignum buf)
 {
     int i = part_num - 1;
     while ((i >= 0) && (buf.part[i] == 0))
@@ -41,7 +41,7 @@ static void bigN_print(bigN buf)
 
 int main()
 {
-    bigN output;
+    bignum output;
 
     long long sz;
 
@@ -71,14 +71,14 @@ int main()
         lseek(fd, i, SEEK_SET);
         struct timespec start, end;
         clock_gettime(CLOCK_REALTIME, &start);
-        sz = read(fd, &output, sizeof(bigN));
+        sz = read(fd, &output, sizeof(bignum));
         clock_gettime(CLOCK_REALTIME, &end);
 
         output.user_t = diff_in_ns(start, end);
 
         printf("Reading to " FIB_DEV ", offset : %d, returned the sequence ",
                i);
-        bigN_print(output);
+        bignum_print(output);
         printf("\n");
 
         // fprintf(fp1, "%d %u\n", i, output.user_t);
